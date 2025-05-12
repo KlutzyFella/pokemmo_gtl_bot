@@ -35,10 +35,14 @@ RELEVANT_GTL_REGION = [529, 355, 576, 380]
 rows = []
 
 
-def take_screenshot():
-    # Wait for a moment to switch to the right window
-    time.sleep(3)
+def click_refresh():
+    # Click the refresh button
+    pyautogui.click(REFRESH_BUTTON_X, REFRESH_BUTTON_Y)
+    # print("Clicked refresh button")
+    time.sleep(0.5)
 
+
+def take_screenshot():
     # Take screenshot of the region
     screenshot = pyautogui.screenshot(region=RELEVANT_GTL_REGION)
 
@@ -46,7 +50,7 @@ def take_screenshot():
     img_cv = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
 
     # Save image
-    cv2.imwrite("gtl_screenshot.png", img_cv)
+    # cv2.imwrite("gtl_screenshot.png", img_cv)
 
     # Get the dimensions of the screenshot
     # img_height, img_width = img_cv.shape[:2]
@@ -54,16 +58,9 @@ def take_screenshot():
     return img_cv
 
 
-def click_refresh():
-    # Click the refresh button
-    pyautogui.click(REFRESH_BUTTON_X, REFRESH_BUTTON_Y)
-    print("Clicked refresh button")
-    # time.sleep(1)
-
-
 def read_screenshot(image):
     # reading through all the 10 rows of the GTL
-    for i in range(10):
+    for i in range(5):
         # Calculate the coordinates for the shiny Pokémon and price
         shiny_y = SHINY_START_Y + i * 38
         shiny_x = SHINY_START_X
@@ -82,14 +79,15 @@ def read_screenshot(image):
         ]
 
         # Write the cropped image to a file
-        cv2.imwrite(f"shiny_crop_{i}.png", shiny_crop)
+        # cv2.imwrite(f"shiny_crop_{i}.png", shiny_crop)
 
-        # Convert the cropped image to grayscale and apply thresholding for OCR
-        shiny_crop_gray = cv2.cvtColor(shiny_crop, cv2.COLOR_BGR2GRAY)
-        shiny_crop_gray = cv2.threshold(shiny_crop_gray, 120, 255, cv2.THRESH_BINARY)[1]
-        shiny_text = pytesseract.image_to_string(shiny_crop_gray, config="--psm 6")
+        # Get the average color of the shiny crop (BGR format)
+        avg_color = cv2.mean(shiny_crop)[:3]  # Returns (B, G, R)
 
-        if shiny_text.strip() == "":
+        # Check if it's roughly yellow (high R and G, low B)
+        if avg_color[1] > 180 and avg_color[2] > 180 and avg_color[0] < 120:
+            is_shiny = True
+        else:
             print(f"Skipping row {i}: no shiny Pokémon detected.")
             continue
 
@@ -99,22 +97,22 @@ def read_screenshot(image):
         ]
 
         # Write the cropped image to a file
-        cv2.imwrite(f"price_crop_{i}.png", price_crop)
+        # cv2.imwrite(f"price_crop_{i}.png", price_crop)
 
         # Convert the cropped image to grayscale and apply thresholding for OCR
         price_crop_gray = cv2.cvtColor(price_crop, cv2.COLOR_BGR2GRAY)
-        price_crop_gray = cv2.threshold(price_crop_gray, 120, 255, cv2.THRESH_BINARY)[1]
-        price_text = pytesseract.image_to_string(price_crop_gray, config="--psm 6")
+        # price_crop_gray = cv2.threshold(price_crop_gray, 120, 255, cv2.THRESH_BINARY)[1]
+        price_text = pytesseract.image_to_string(price_crop_gray, config="--psm 7")
         price_int = int(price_text.replace("$", "").replace(",", ""))
 
         # Append the shiny Pokémon name and price to the list
-        rows.append((shiny_text.strip(), price_int))
+        rows.append((is_shiny, price_int))
 
-        if shiny_text.strip() != "" and price_int < SHINY_BUY_THRESHOLD:
+        if is_shiny and price_int < SHINY_BUY_THRESHOLD:
             # Click the buy button
             pyautogui.click(BUY_BUTTON_X, buy_button_y)
             pyautogui.press("e")
-            print(f"Bought shiny Pokémon: {shiny_text.strip()} for {price_int}")
+            print(f"Bought shiny Pokémon: {is_shiny} for {price_int}")
             # time.sleep(1)
             break
 
@@ -126,12 +124,15 @@ def read_screenshot(image):
 
 # Main loop
 def main():
-    while True:
-        # Take a screenshot
-        screenshot = take_screenshot()
+    # Wait for a moment to switch to the right window
+    time.sleep(3)
 
+    while True:
         # Click the refresh button
         click_refresh()
+        
+        # Take a screenshot
+        screenshot = take_screenshot()
 
         # Read the screenshot
         read_screenshot(screenshot)
